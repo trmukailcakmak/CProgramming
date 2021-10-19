@@ -14,7 +14,8 @@ void updateRecordCopy(FILE *);
 
 int newRecordCopy(FILE *);
 
-void deleteFile(FILE *);
+void deleteBinaryFile(FILE *);
+void deleteTextFile(FILE *);
 
 void deleteStudentIndex(FILE *fPtr,int ogrNo, int line);
 
@@ -22,6 +23,7 @@ struct kayit_index getStudentIndexFile(FILE *fPtr,int ogrNo);
 void newRecordIndexFile(FILE *fPtr,int ogrNo, int line);
 
 void deleteStudentBinary(FILE *indexFPtr,FILE *binaryFPtr,int ogrNo);
+void displayIndexFile(FILE *readPtr);
 
 int enterChoice(void);
 
@@ -48,7 +50,7 @@ struct kayit_index {
 void main() {
     FILE *cfPtr;
     FILE *binaryfPtr;
-    FILE *indexfPtr;
+    FILE *indexfPtr = fopen("../text_data.txt", "r+");
     int choice;
     if(1==0) {
         if ((cfPtr = fopen("../credit.dat", "r+")) == NULL)
@@ -74,13 +76,14 @@ void main() {
         }
     }
     else{
-        if ((binaryfPtr = fopen("../binary_data.bin", "r+b")) == NULL && (indexfPtr = fopen("../text_data.txt", "r+")) == NULL)
+        if ((binaryfPtr = fopen("../binary_data.bin", "r+b")) == NULL && indexfPtr  == NULL)
             printf("Binary dosya veya text dosyası acılmadı...\n");
         else {
             while ((choice = enterChoice()) != 5) {
                 switch (choice) {
                     case 1:
                         displayCopy(binaryfPtr);
+                        displayIndexFile(indexfPtr);
                         break;
                     case 2:
                         updateRecordCopy(binaryfPtr);
@@ -92,12 +95,15 @@ void main() {
                         break;
                     case 4:
                         int ogrNo;
-                        printf("Silinecek OgrNo Girin : ");
                         scanf("%d", &ogrNo);
                         deleteStudentBinary(indexfPtr,binaryfPtr,ogrNo);
                         break;
                     case 6:
-                        deleteFile(binaryfPtr);
+                        deleteBinaryFile(binaryfPtr);
+                        deleteTextFile(indexfPtr);
+                        break;
+                    case 7:
+
                         break;
                 }
             }
@@ -131,6 +137,30 @@ void displayCopy(FILE *readPtr) {
             printf("%-9d%-10d%-10.2f%-16s%16s\n",
                    client.ogrNo, client.dersKodu,
                    client.puan, client.ogrName,client.dersName);
+    }
+}
+
+void displayIndexFile(FILE *readPtr) {
+    struct kayit_index kayitIndex = {-1,-1};
+    rewind(readPtr);
+    printf("%-9s%-20s%\n",
+           "ogrNo", "satir");
+    while (!feof(readPtr)) {
+        fread(&kayitIndex, sizeof(struct kayit_index), 1, readPtr);
+        if (!feof(readPtr)) {
+
+            if(kayitIndex.ogrNoAnahtar!=-1 && kayitIndex.ogrNoAnahtar!=0) {
+
+                printf("%-9d%", kayitIndex.ogrNoAnahtar);
+
+                for (int m = 0; m < 20; m++) {
+                    if (kayitIndex.lineArr[m] != -1) {
+                        printf("%d-", kayitIndex.lineArr[m]);
+                    }
+                }
+                printf("\n");
+            }
+        }
     }
 }
 
@@ -239,9 +269,17 @@ void deleteStudentBinary(FILE *indexFPtr,FILE *binaryFPtr,int ogrNo) {
     }
 }
 
-void deleteFile(FILE *fPtr) {
+void deleteBinaryFile(FILE *fPtr) {
     fclose(fPtr);
     if (remove("../binary_data.bin")==0)
+        printf("Dosya başarılı bir şekilde silindi!");
+    else
+        perror("Dosya silme hatası");
+}
+
+void deleteTextFile(FILE *fPtr) {
+    fclose(fPtr);
+    if (remove("../text_data.txt")==0)
         printf("Dosya başarılı bir şekilde silindi!");
     else
         perror("Dosya silme hatası");
@@ -274,11 +312,10 @@ void newRecord(FILE *fPtr) {
 void newRecordIndexFile(FILE *fPtr,int ogrNo, int line) {
     struct kayit_index kayitIndex = getStudentIndexFile(fPtr,ogrNo);
 
-    fseek(fPtr, (ogrNo - 1) * sizeof(struct kayit_index),
-          SEEK_SET);
     if(kayitIndex.ogrNoAnahtar==-1) {
         kayitIndex.ogrNoAnahtar = ogrNo;
         kayitIndex.lineArr[0] = line;
+        fseek(fPtr, (ogrNo - 1) * sizeof(struct kayit_index),SEEK_SET);
         fwrite(&kayitIndex, sizeof(struct kayit_index), 1, fPtr);
     }
     else{
@@ -288,12 +325,35 @@ void newRecordIndexFile(FILE *fPtr,int ogrNo, int line) {
                 break;
             }
         }
-        fwrite(&kayitIndex, sizeof(struct kayit_index), 1, fPtr);
+
+        int count=1;
+        struct kayit_index tmpKayitIndex;
+
+        tmpKayitIndex.ogrNoAnahtar = -1;
+        for (int i=0;i<20;i++){
+            tmpKayitIndex.lineArr[i] = -1;
+        }
+        rewind(fPtr);
+        while (!feof(fPtr)) {
+
+            fread(&tmpKayitIndex, sizeof(struct kayit_index), 1, fPtr);
+
+            if (!feof(fPtr) && tmpKayitIndex.ogrNoAnahtar==ogrNo){
+                fseek(fPtr, (count - 1) * sizeof(struct kayit_index),
+                      SEEK_SET);
+                fwrite(&kayitIndex, sizeof(struct kayit_index), 1, fPtr);
+                break;
+            }
+            count++;
+
+        }
+
     }
 }
 
 void deleteStudentIndex(FILE *fPtr,int ogrNo, int line) {
     struct kayit_index kayitIndex = getStudentIndexFile(fPtr,ogrNo);
+
 
     fseek(fPtr, (ogrNo - 1) * sizeof(struct kayit_index),
           SEEK_SET);
@@ -320,6 +380,7 @@ struct kayit_index getStudentIndexFile(FILE *fPtr,int ogrNo) {
     kayitIndex.ogrNoAnahtar = -1;
     for (int i=0;i<20;i++){
         kayitIndex.lineArr[i] = -1;
+
     }
 
     fseek(fPtr, (ogrNo - 1) * sizeof(struct kayit_index),
@@ -350,6 +411,7 @@ int enterChoice(void) {
            "3 - Yeni Hesap\n"
            "4 - Hesap Sil\n"
            "6 - Dosyayı sil\n"
+           "7 - indexFile Show\n"
            "5 - Cikis\n? ");
     scanf("%d", &menuChoice);
     return menuChoice;
